@@ -80,8 +80,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # git is needed at RUN time, not only at build time: provenance.collect_provenance
 # shells out to git to record the commit and whether the tree is dirty, and
 # lock_plan.py refuses to run where `git status --porcelain` cannot be taken.
+# curl fetches the EWT test split below, the way setup.sh does.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends git ca-certificates \
+ && apt-get install -y --no-install-recommends git ca-certificates curl \
  && rm -rf /var/lib/apt/lists/*
 
 # A non-root user, because the smoke target writes results/ and a bind mount
@@ -130,9 +131,28 @@ RUN cat /tmp/core-pins.txt \
  && python -m pip install --no-cache-dir -r /tmp/core-pins.txt \
  && python -m pip install --no-cache-dir -e . --no-deps
 
+# The EWT test split, release r2.17: the exploratory set every number of version
+# 1.0 was measured on, and the `ewt_test` entry of the lock's `data` key.
+# scripts/fetch_data.py fetches only the datasets the plan gives a `source`, and
+# EWT has none - setup.sh downloads it (step 4) - so the image does it here, the
+# same way: the release tag, curl -f, and the digest the project records in
+# data/en_ewt-ud-test.conllu.sha256.
+#
+# At build time and in this stage, not in verify.sh: smoke is FROM verify and
+# runs smoke_plan.py directly, so a download at run time would never reach it.
+# CI builds from scratch on every run, so a moved r2.17 tag fails the weekly
+# build loudly. verify.sh check 3 then re-hashes the file on disk against the
+# lock itself. data/*.conllu is in the project's .gitignore, so the tree stays
+# clean.
+RUN curl -fsSL --retry 3 --retry-delay 2 \
+      https://raw.githubusercontent.com/UniversalDependencies/UD_English-EWT/r2.17/en_ewt-ud-test.conllu \
+      -o data/en_ewt-ud-test.conllu \
+ && (cd data && sha256sum -c en_ewt-ud-test.conllu.sha256)
+
 COPY --chown=runner:runner scripts/verify.sh /usr/local/bin/verify.sh
 COPY --chown=runner:runner scripts/check_plan_digest.py /usr/local/bin/check_plan_digest.py
 COPY --chown=runner:runner scripts/check_versions.py /usr/local/bin/check_versions.py
+COPY --chown=runner:runner scripts/check_lock_data.py /usr/local/bin/check_lock_data.py
 
 CMD ["bash", "/usr/local/bin/verify.sh"]
 

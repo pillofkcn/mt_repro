@@ -96,6 +96,16 @@ else
     fail "fetch_data.py --verify-only"
     grep -E "PROBLEM|does not match|FAILED" /tmp/verify.log | sed 's/^/        /' | head -10
 fi
+
+# EWT is not among them: the plan gives it no `source`, so fetch_data.py leaves
+# it alone, yet the lock's `data` key records it (ewt_test). The image downloads
+# it at build time and checks it against data/en_ewt-ud-test.conllu.sha256
+# (Dockerfile); this re-hashes the file on disk against the lock's own record,
+# through the project's seal, so check 3 covers ewt_test as it covers the two
+# confirmatory sets.
+python /usr/local/bin/check_lock_data.py ewt_test
+if [ $? -eq 0 ]; then pass "ewt_test (EWT r2.17 test split, fetched at build) matches the lock"
+else fail "ewt_test does not match the lock"; fi
 echo
 
 # -----------------------------------------------------------------------------
@@ -121,7 +131,7 @@ pass "version report written (drift is reported, not failed)"
 echo
 
 # -----------------------------------------------------------------------------
-# 4. The lock keys this room cannot reach.
+# 4. The parts of the lock this room cannot reach.
 # -----------------------------------------------------------------------------
 echo "============================================================"
 echo " 4. Not checked here"
@@ -134,6 +144,10 @@ skip "lock key 'commit' - mt_public is a squashed publication of the project"
 echo "        The lock names the commit it was computed from, in the original"
 echo "        repository. mt_public has a history of its own, so that hash is"
 echo "        not reachable here and recomputing the key would always differ."
+skip "lock key 'data', entry 'wsj_01' - the NLTK treebank sample is not in the image"
+echo "        It is NLTK's Penn Treebank sample (corpora/treebank, WSJ section 01),"
+echo "        which nltk.download serves from the nltk_data index rather than from"
+echo "        a pinned ref. setup.sh downloads it (step 3); this image does not."
 echo
 
 echo "============================================================"
