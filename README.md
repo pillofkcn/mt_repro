@@ -83,6 +83,15 @@ digest is taken with CRLF read as LF. A checkout on a machine that normalises li
 would otherwise disagree with the lock about a file nobody edited — exactly the false
 alarm a clean room exists to rule out, so it must not be the clean room raising it.
 
+**A zero for `pcfg_words` is not a failure.** It may parse none of the smoke sentences, and
+on the first five of WSJ section 01 it parses none (F1 0.00). A PCFG induced over words is
+lexically sparse: each of those five sentences has a word that WSJ section 00, the section
+the grammar is induced from, does not contain (*Hahn* in four of them), and a word the
+grammar has no rule for leaves its sentence without a parse. None of the five is over the
+plan's 40-word cap, and `pcfg_tags`, induced over part-of-speech tags, parses four. The
+smoke contract is that a configuration builds, loads and produces output, not that it
+parses everything.
+
 ## What it deliberately does not check
 
 **The `models` key of the lock.** It is the digest of five models the project trains, and
