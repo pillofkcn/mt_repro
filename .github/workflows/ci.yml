@@ -141,7 +141,13 @@ jobs:
 
       - name: Smoke the plan
         run: |
-          mkdir -p out
+          # Both directories belong to the runner user (uid 1001), and so does
+          # everything a cache hit restores into model_cache/; the container
+          # writes as uid 1000. They are scratch directories on an ephemeral
+          # runner, so widening them - recursively, for the restored
+          # subdirectories - is simpler and less fragile than matching uids
+          # between host and image.
+          mkdir -p model_cache out && chmod -R a+rwX model_cache out
           docker run --rm \
             -v "${PWD}/model_cache:/app/prog/model_cache" \
             -v "${PWD}/out:/app/prog/results/smoke" \

@@ -85,8 +85,11 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/*
 
 # A non-root user, because the smoke target writes results/ and a bind mount
-# would otherwise come back owned by root on the host. 1000 matches the usual
-# first user on a Linux host and on the GitHub Actions runner.
+# would otherwise come back owned by root on the host. 1000 is simply a fixed,
+# non-root uid. It is not chosen to match any host user, and on GitHub Actions
+# it does not: the runner user there is uid 1001. The workflow and `make smoke`
+# make the directories they mount writable instead of trying to match the host
+# uid.
 RUN useradd --create-home --uid 1000 runner
 
 COPY --from=source --chown=runner:runner /src /app

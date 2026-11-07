@@ -11,7 +11,7 @@ verify: build-verify
 	docker run --rm $(IMAGE):verify
 
 smoke: build-smoke
-	mkdir -p model_cache out
+	mkdir -p model_cache out && chmod -R a+rwX model_cache out
 	docker run --rm \
 	  -v "$(CURDIR)/model_cache:/app/prog/model_cache" \
 	  -v "$(CURDIR)/out:/app/prog/results/smoke" \
