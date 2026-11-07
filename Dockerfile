@@ -180,7 +180,65 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/*
 USER runner
 
-RUN python -m pip install --no-cache-dir -e ".[spacy,udpipe,nltk-extra]"
+# Pinned from plan/LOCK.json, as the verify stage pins the core. An unpinned
+# range in this stage would be the same defect the README documents for nltk -
+# a range resolving to a version the lock never saw - in the same repository
+# that argues against it. Resolved by range, this stage installed spacy 3.8.18
+# where the lock records 3.8.11, and scikit-learn 1.9.1 where it records 1.8.0.
+#
+#   smoke-pins.txt        spacy, scikit-learn and ufal.udpipe at the lock's
+#                         versions: the packages this stage adds.
+#   lock-constraints.txt  every library the lock records, as constraints. It
+#                         installs nothing by itself, but it holds thinc and
+#                         scipy - which the lock also records, and which spacy
+#                         and scikit-learn pull in - at the lock's versions, and
+#                         keeps numpy, nltk and pyyaml where the verify stage
+#                         put them. A dependency the lock does not record
+#                         (pydantic, for one) still resolves within its range.
+#   en-core-web-sm.txt    spaCy's small English pipeline, which is not on PyPI.
+#                         requirements-lock.txt names its wheel by URL with a
+#                         sha256, and that is what is installed, in hash-checking
+#                         mode, after checking that its version is the one the
+#                         lock records. setup.sh's `spacy download
+#                         en_core_web_sm` names no version, so it is not
+#                         followed here.
+#
+# The project goes in last with --no-deps, so pip cannot resolve its extras
+# around the pins, and pip check fails the build if a pin breaks a range that
+# the project or one of the packages declares.
+RUN python - <<'PY'
+import json
+import re
+
+libs = json.load(open("plan/LOCK.json", encoding="utf-8"))["versions"]["libraries"]
+with open("/tmp/smoke-pins.txt", "w", encoding="utf-8") as out:
+    for name in ("spacy", "scikit-learn", "ufal.udpipe"):
+        out.write(f"{name}=={libs[name]}\n")
+with open("/tmp/lock-constraints.txt", "w", encoding="utf-8") as out:
+    for name, version in sorted(libs.items()):
+        if name != "en_core_web_sm":
+            out.write(f"{name}=={version}\n")
+
+lines = [
+    line.strip()
+    for line in open("requirements-lock.txt", encoding="utf-8")
+    if line.startswith("en_core_web_sm @ ")
+]
+assert len(lines) == 1, f"requirements-lock.txt: {len(lines)} en_core_web_sm lines, expected 1"
+url, digest = lines[0].split(" @ ", 1)[1].split("#sha256=")
+version = re.search(r"/en_core_web_sm-([^/-]+)-py3-none-any\.whl$", url).group(1)
+assert version == libs["en_core_web_sm"], (
+    f"requirements-lock.txt has en_core_web_sm {version}, "
+    f"plan/LOCK.json records {libs['en_core_web_sm']}"
+)
+with open("/tmp/en-core-web-sm.txt", "w", encoding="utf-8") as out:
+    out.write(f"en_core_web_sm @ {url} --hash=sha256:{digest}\n")
+PY
+RUN cat /tmp/smoke-pins.txt /tmp/en-core-web-sm.txt \
+ && python -m pip install --no-cache-dir -r /tmp/smoke-pins.txt -c /tmp/lock-constraints.txt \
+ && python -m pip install --no-cache-dir --no-deps --require-hashes -r /tmp/en-core-web-sm.txt \
+ && python -m pip install --no-cache-dir --no-deps -e ".[spacy,udpipe,nltk-extra]" \
+ && python -m pip check
 
 # Keep the caches inside the image rather than in the user's home by default, so
 # a bind mount of model_cache/ is the only thing that needs to persist.

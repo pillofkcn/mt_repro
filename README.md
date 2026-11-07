@@ -60,10 +60,11 @@ the default way today. The lock was right and the range was too wide, and nothin
 have reported that until someone installed from scratch on a machine that had never seen
 the project.
 
-That is the whole argument for this repository in one bug, so the `verify` image now pins
-its core packages from `plan/LOCK.json` rather than resolving the ranges, and check 3b
-reports version drift precisely so that a digest match with a format failure reads as
-"the reader changed" instead of "the data moved".
+That is the whole argument for this repository in one bug, so both images now take their
+packages from `plan/LOCK.json` rather than resolving the ranges — the core in `verify`, the
+analyzers and spaCy's English pipeline in `smoke` — and check 3b reports version drift
+precisely so that a digest match with a format failure reads as "the reader changed"
+instead of "the data moved".
 
 ## What it checks
 
@@ -129,8 +130,8 @@ tag, which is the failure this repository exists to catch.
 **Three targets, cheapest first.** `verify` installs the core dependencies only — enough
 to load the plan and hash the data, and not enough to run a single analyzer. That is the
 point: if `verify` fails, the problem is the project or the data, not an analyzer. `smoke`
-adds the torch-free analyzers; `full` installs `requirements-lock.txt`, the exact
-environment that produced the version 1.0 results.
+adds the torch-free analyzers, at the versions the lock records; `full` installs
+`requirements-lock.txt`, the exact environment that produced the version 1.0 results.
 
 **The base image is pinned to Python 3.13, not `3` or `latest`.** The lock was taken on
 3.13.0 and `pyproject.toml` declares `>=3.10,<3.14`, because spaCy fails on 3.14 through
