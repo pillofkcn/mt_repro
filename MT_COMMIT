@@ -1,0 +1,12 @@
+# The commit of pillofkcn/mt_public this room checks.
+#
+# A full 40-character hash, never a branch or a tag: the whole point of this
+# repository is that the thing under test does not move between runs. Bump it in
+# a commit of its own, with the reason in the message.
+#
+# 55b5a902 narrows pyproject's nltk range to >=3.9,<3.10. The previous pin,
+# 08a02edc, is the commit on which this room's first run found that the old
+# range (<4) resolved to 3.10.4 and broke the MCTB dialogue format check. That
+# hash no longer resolves - mt_public was republished - which is its own small
+# argument for pinning: a ref that moved would have hidden the whole episode.
+55b5a9028e5ac0e16b6550f1e9a989c47b49e996

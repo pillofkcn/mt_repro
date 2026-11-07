@@ -1,0 +1,8 @@
+* text=auto eol=lf
+# Shell scripts run inside a Linux container. With CRLF, bash fails on the
+# shebang with "\r: command not found", and the failure names no file.
+*.sh text eol=lf
+Dockerfile text eol=lf
+Makefile text eol=lf
+*.yml text eol=lf
+*.py text eol=lf

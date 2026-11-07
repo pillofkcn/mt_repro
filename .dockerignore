@@ -1,0 +1,10 @@
+# The build context carries the workflow and the docs, not the project: the
+# project is cloned inside the image at the pinned commit (see Dockerfile).
+# Keeping the context near-empty also means a docs-only change does not
+# invalidate a single image layer.
+.git
+.github
+*.md
+MT_COMMIT
+model_cache
+out

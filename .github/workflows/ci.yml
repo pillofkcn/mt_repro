@@ -1,0 +1,158 @@
+name: verify
+
+# Three triggers, for three different questions.
+#
+#   push / pull_request  did a change to THIS repository break the room?
+#   schedule             did something outside both repositories decay?
+#   workflow_dispatch    re-check on demand, or against another commit
+#
+# The scheduled run is the one that earns its keep. The benchmark pins its two
+# confirmatory datasets to GitHub repositories at a ref, and a ref can be
+# force-pushed, a repository renamed or made private. Nothing in either
+# repository would notice; a weekly fetch notices within a week.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # 06:17 on Mondays. Not on the hour: GitHub queues scheduled jobs and the
+    # top of the hour is where everyone puts them.
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+    inputs:
+      mt_ref:
+        description: "Commit of pillofkcn/mt_public to check (default: the one in MT_COMMIT)"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ===========================================================================
+  resolve:
+    # The pinned commit lives in a file rather than in this workflow, so that
+    # bumping it is a one-line diff with a reason in the message, and so the
+    # Makefile and the workflow cannot drift apart over which commit is current.
+    runs-on: ubuntu-24.04
+    outputs:
+      mt_ref: ${{ steps.pick.outputs.mt_ref }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: pick
+        run: |
+          REF="${{ inputs.mt_ref }}"
+          if [ -z "$REF" ]; then
+            REF="$(grep -vE '^\s*(#|$)' MT_COMMIT | head -n1 | tr -d '[:space:]')"
+          fi
+          case "$REF" in
+            [0-9a-f]*) : ;;
+            *) echo "::error::MT_COMMIT must be a full commit hash, got '$REF'"; exit 1 ;;
+          esac
+          if [ "${#REF}" -ne 40 ]; then
+            echo "::error::MT_COMMIT must be a FULL 40-character hash, got '${REF}' (${#REF} chars)"
+            exit 1
+          fi
+          echo "mt_ref=$REF" >> "$GITHUB_OUTPUT"
+          echo "Checking pillofkcn/mt_public @ $REF"
+
+  # ===========================================================================
+  verify:
+    # Cheap and model-free: the plan digest and the pinned datasets. If this
+    # fails, the smoke job below tells you nothing you want to hear, so it does
+    # not run.
+    needs: resolve
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build verify image
+        run: |
+          docker build \
+            --target verify \
+            --build-arg MT_REF=${{ needs.resolve.outputs.mt_ref }} \
+            -t mt-repro:verify .
+
+      - name: Run checks
+        run: docker run --rm mt-repro:verify
+
+  # ===========================================================================
+  smoke:
+    # Builds and loads every configuration the image can reach and runs it on a
+    # few sentences. scripts/smoke_plan.py exits 1 if any configuration failed,
+    # so this job needs no assertions of its own.
+    #
+    # Five of the nine torch-free configurations load a model this project
+    # trains, and training them takes hours. They are therefore only as
+    # available as the cache: on a miss, the job runs the rows that need no
+    # trained model and says so. That is deliberate - a job that trained on
+    # every push would take three hours and nobody would read it.
+    needs: [resolve, verify]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build smoke image
+        run: |
+          docker build \
+            --target smoke \
+            --build-arg MT_REF=${{ needs.resolve.outputs.mt_ref }} \
+            -t mt-repro:smoke .
+
+      - name: Restore trained models
+        id: models
+        uses: actions/cache@v4
+        with:
+          path: model_cache
+          # Keyed on the commit: a change to a training script changes the
+          # models, and a cache that outlived it would smoke-test models that no
+          # longer match the code that trains them.
+          key: model-cache-${{ needs.resolve.outputs.mt_ref }}
+          restore-keys: |
+            model-cache-
+
+      - name: Pick configurations this run can actually build
+        id: keys
+        run: |
+          # Rows that need nothing trained. The rest are added only when the
+          # cache supplied their model, so an empty cache gives a short green
+          # run rather than nine red ones.
+          KEYS="--key spacy_sm --key pcfg_words --key pcfg_tags"
+          if [ -d model_cache ] && [ -n "$(ls -A model_cache 2>/dev/null)" ]; then
+            echo "model_cache present:"; ls -1 model_cache | sed 's/^/  /'
+            for pair in "udpipe_ewt:english-ewt-retrained.udpipe" \
+                        "spacy_ewt:spacy_ewt" \
+                        "rdr_ewt:rdrpos_ewt" \
+                        "nltk_ewt:nltk_perceptron_ud_ewt_train"; do
+              key="${pair%%:*}"; path="${pair#*:}"
+              if [ -e "model_cache/$path" ]; then KEYS="$KEYS --key $key"; fi
+            done
+          else
+            echo "model_cache empty - running only the rows that need no trained model."
+          fi
+          echo "keys=$KEYS" >> "$GITHUB_OUTPUT"
+          echo "configurations: $KEYS"
+
+      - name: Smoke the plan
+        run: |
+          mkdir -p out
+          docker run --rm \
+            -v "${PWD}/model_cache:/app/prog/model_cache" \
+            -v "${PWD}/out:/app/prog/results/smoke" \
+            mt-repro:smoke \
+            python scripts/smoke_plan.py --sentences 5 ${{ steps.keys.outputs.keys }}
+
+      - name: Upload smoke evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-${{ needs.resolve.outputs.mt_ref }}
+          path: out/
+          if-no-files-found: warn
+          retention-days: 30
