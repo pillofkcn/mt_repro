@@ -123,7 +123,7 @@ jobs:
           # Rows that need nothing trained. The rest are added only when the
           # cache supplied their model, so an empty cache gives a short green
           # run rather than nine red ones.
-          KEYS="--key spacy_sm --key pcfg_words --key pcfg_tags"
+          KEYS="--key spacy_sm --key nltk_pre --key pcfg_words --key pcfg_tags"
           if [ -d model_cache ] && [ -n "$(ls -A model_cache 2>/dev/null)" ]; then
             echo "model_cache present:"; ls -1 model_cache | sed 's/^/  /'
             for pair in "udpipe_ewt:english-ewt-retrained.udpipe" \

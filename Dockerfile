@@ -200,7 +200,8 @@ CMD ["bash", "/usr/local/bin/verify.sh"]
 # spacy_ewt, nltk_arc, pcfg_words and pcfg_tags. Five of them load a model this
 # project TRAINS (setup.sh: about 3 h 15 min from zero on a CPU), so the image
 # does not train them. The CI workflow caches model_cache/ and passes the keys
-# it has; with an empty cache only spacy_sm and the two PCFG rows run.
+# it has; with an empty cache the four that need nothing trained run: spacy_sm,
+# nltk_pre and the two PCFG rows.
 FROM verify AS smoke
 
 USER root
