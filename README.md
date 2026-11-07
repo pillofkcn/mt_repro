@@ -144,6 +144,10 @@ to load the plan and hash the data, and not enough to run a single analyzer. Tha
 point: if `verify` fails, the problem is the project or the data, not an analyzer. `smoke`
 adds the torch-free analyzers, at the versions the lock records; `full` installs
 `requirements-lock.txt`, the exact environment that produced the version 1.0 results.
+`verify` and `smoke` also install with `requirements-lock.txt` as constraints, which
+install nothing but hold every dependency where version 1.0 had it, so the only package
+in either image that differs from that freeze is pip itself, which comes with the base
+image.
 
 **The base image is pinned to Python 3.13, not `3` or `latest`.** The lock was taken on
 3.13.0 and `pyproject.toml` declares `>=3.10,<3.14`, because spaCy fails on 3.14 through

@@ -119,6 +119,11 @@ USER runner
 #
 # Taking the pins from the lock rather than writing them here means this image
 # follows the project when the project relocks, and cannot drift from it.
+#
+# requirements-lock.txt, the pip freeze of version 1.0, goes in as constraints:
+# it installs nothing by itself, but it holds what the three pull in - nltk's
+# click, joblib, regex and tqdm, which plan/LOCK.json does not record - at the
+# versions of version 1.0 rather than the newest in range.
 RUN python - <<'PY' > /tmp/core-pins.txt
 import json
 libs = json.load(open("plan/LOCK.json", encoding="utf-8"))["versions"]["libraries"]
@@ -128,7 +133,7 @@ for name in ("numpy", "nltk", "pyyaml"):
         print(f"{name}=={version}")
 PY
 RUN cat /tmp/core-pins.txt \
- && python -m pip install --no-cache-dir -r /tmp/core-pins.txt \
+ && python -m pip install --no-cache-dir -r /tmp/core-pins.txt -c requirements-lock.txt \
  && python -m pip install --no-cache-dir -e . --no-deps
 
 # The EWT test split, release r2.17: the exploratory set every number of version
@@ -220,9 +225,16 @@ USER runner
 #                         scipy - which the lock also records, and which spacy
 #                         and scikit-learn pull in - at the lock's versions, and
 #                         keeps numpy, nltk and pyyaml where the verify stage
-#                         put them. A dependency the lock does not record
-#                         (pydantic, for one) still resolves within its range.
-#   en-core-web-sm.txt    spaCy's small English pipeline, which is not on PyPI.
+#                         put them.
+#   requirements-lock.txt the pip freeze of version 1.0, as constraints too,
+#                         for what plan/LOCK.json does not record: without it,
+#                         pydantic, typer, blis and two dozen more dependencies
+#                         resolved to the newest in range (pydantic 2.14.3
+#                         where version 1.0 had 2.12.5). It names torch
+#                         too, but a constraint installs nothing, so torch is
+#                         not pulled in. Where the two files disagree on a
+#                         version, pip refuses, which is a check of its own.
+#   en-core-web-sm.txt   spaCy's small English pipeline, which is not on PyPI.
 #                         requirements-lock.txt names its wheel by URL with a
 #                         sha256, and that is what is installed, in hash-checking
 #                         mode, after checking that its version is the one the
@@ -262,7 +274,8 @@ with open("/tmp/en-core-web-sm.txt", "w", encoding="utf-8") as out:
     out.write(f"en_core_web_sm @ {url} --hash=sha256:{digest}\n")
 PY
 RUN cat /tmp/smoke-pins.txt /tmp/en-core-web-sm.txt \
- && python -m pip install --no-cache-dir -r /tmp/smoke-pins.txt -c /tmp/lock-constraints.txt \
+ && python -m pip install --no-cache-dir -r /tmp/smoke-pins.txt \
+      -c /tmp/lock-constraints.txt -c requirements-lock.txt \
  && python -m pip install --no-cache-dir --no-deps --require-hashes -r /tmp/en-core-web-sm.txt \
  && python -m pip install --no-cache-dir --no-deps -e ".[spacy,udpipe,nltk-extra]" \
  && python -m pip check
