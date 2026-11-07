@@ -154,6 +154,12 @@ skip "lock key 'commit' - mt_public is a squashed publication of the project"
 echo "        The lock names the commit it was computed from, in the original"
 echo "        repository. mt_public has a history of its own, so that hash is"
 echo "        not reachable here and recomputing the key would always differ."
+skip "lock key 'downloaded_models' - the published files each configuration loads"
+echo "        Per configuration, the digest of every file its load reads that the"
+echo "        project does not train: spaCy's en_core_web_sm, NLTK's tagger and"
+echo "        WSJ section 00, Stanza's resources. The project checks them with"
+echo "        seal.verify_model right before each load of a confirmatory run;"
+echo "        smoke_plan.py does not call it, and nothing here does yet."
 echo
 
 echo "============================================================"

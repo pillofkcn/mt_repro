@@ -100,6 +100,13 @@ push would take three hours and nobody would read it. `scripts/verify.sh` report
 `SKIP` with the reason, rather than printing green over a run that covered less than the
 lock does.
 
+**The `downloaded_models` key of the lock, for now.** It records, per configuration, the
+digest of every file a load reads that the project does not train: spaCy's
+`en_core_web_sm`, NLTK's tagger and WSJ section 00, Stanza's resources. The project checks
+them with `seal.verify_model` right before each load of a confirmatory run, but
+`smoke_plan.py` does not call it, so nothing in this room compares them yet. `verify.sh`
+reports the key as `SKIP` rather than leave it unmentioned.
+
 **Seven of the sixteen configurations.** The five `stanza_*` rows, `benepar` and
 `supar_con` pull in torch, and the `electra-large` rows additionally load a 1.3 GB
 transformer. Those belong in the `full` image and on a machine with time. The `smoke`
