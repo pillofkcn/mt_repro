@@ -154,6 +154,33 @@ COPY --chown=runner:runner scripts/check_plan_digest.py /usr/local/bin/check_pla
 COPY --chown=runner:runner scripts/check_versions.py /usr/local/bin/check_versions.py
 COPY --chown=runner:runner scripts/check_lock_data.py /usr/local/bin/check_lock_data.py
 
+# WSJ section 01, the other exploratory set and the `wsj_01` entry of the lock's
+# `data` key: the 100 files of NLTK's Penn Treebank sample the con task is
+# scored on. setup.sh downloads the sample with nltk.download (step 3), and so
+# does this, at build time and in this stage for the same reasons as EWT above:
+# smoke inherits it and check 3 re-checks it. Before this, every smoke run
+# fetched it itself, from NLTK's index, into ~/nltk_data.
+#
+# NLTK's index is not pinned to a ref the way the release tag pins EWT, so the
+# lock is what makes a change loud: check_lock_data.py runs here as well as in
+# verify.sh, and a sample that no longer matches the 100 recorded digests fails
+# the build. SYNTACTIC_ANALYSIS_OFFLINE=1 makes a missing package an error
+# rather than a download.
+#
+# The download directory is explicit, and outside both the repository (the tree
+# must stay clean) and model_cache/, which the smoke job and `make smoke`
+# bind-mount over: a mount hides whatever the image holds at that path. It is
+# root-owned, so nothing that runs as `runner` can replace what was checked
+# here. NLTK_DATA puts it first in nltk.data.path, so NLTK reads this copy
+# before one in ~/nltk_data. pip installed nltk as `runner`, into its user site;
+# PYTHONUSERBASE lets root import it for the one command that downloads.
+ENV NLTK_DATA=/usr/local/share/nltk_data
+USER root
+RUN PYTHONUSERBASE=/home/runner/.local \
+    python -c "import nltk, sys; sys.exit(not nltk.download('treebank', download_dir='/usr/local/share/nltk_data', quiet=True, raise_on_error=True))"
+USER runner
+RUN SYNTACTIC_ANALYSIS_OFFLINE=1 python /usr/local/bin/check_lock_data.py wsj_01
+
 CMD ["bash", "/usr/local/bin/verify.sh"]
 
 # =============================================================================
@@ -240,9 +267,25 @@ RUN cat /tmp/smoke-pins.txt /tmp/en-core-web-sm.txt \
  && python -m pip install --no-cache-dir --no-deps -e ".[spacy,udpipe,nltk-extra]" \
  && python -m pip check
 
-# Keep the caches inside the image rather than in the user's home by default, so
-# a bind mount of model_cache/ is the only thing that needs to persist.
-ENV NLTK_DATA=/app/prog/model_cache/nltk_data
+# The tagger the two PCFG rows (and nltk_pre) tag their input with,
+# averaged_perceptron_tagger_eng. NltkAnalyzer.load fetches it with
+# nltk.download whenever downloads are allowed, so like the treebank sample it
+# came from NLTK's index on every run. Into the same root-owned directory, at
+# build time.
+USER root
+RUN PYTHONUSERBASE=/home/runner/.local \
+    python -c "import nltk, sys; sys.exit(not nltk.download('averaged_perceptron_tagger_eng', download_dir='/usr/local/share/nltk_data', quiet=True, raise_on_error=True))"
+USER runner
+
+# No downloads at run time. Outside a run the project's loaders call
+# nltk.download, which reads NLTK's index and fetches a package when it is
+# missing or the index lists a newer one - into ~/nltk_data, since the
+# directory above is not writable. SYNTACTIC_ANALYSIS_OFFLINE=1, the switch
+# scripts/run_pipeline.py sets for every stage of a run (offline.py), makes
+# them read what is on disk and fail if it is not there. spaCy's pipeline is an
+# installed package and the trained models come from model_cache/, so nothing
+# a smoke row loads needs the network.
+ENV SYNTACTIC_ANALYSIS_OFFLINE=1
 
 CMD ["python", "scripts/smoke_plan.py", "--sentences", "5"]
 
@@ -257,6 +300,10 @@ CMD ["python", "scripts/smoke_plan.py", "--sentences", "5"]
 # --no-deps after the lock, matching setup.sh's LOCKED=1 path: the lock already
 # names every transitive version, and letting pip resolve again would defeat it.
 FROM smoke AS full
+
+# setup.sh and the training scripts download what is missing (offline.py), so
+# the smoke stage's switch is turned back off.
+ENV SYNTACTIC_ANALYSIS_OFFLINE=
 
 USER root
 RUN apt-get update \

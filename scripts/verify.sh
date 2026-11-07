@@ -106,6 +106,16 @@ fi
 python /usr/local/bin/check_lock_data.py ewt_test
 if [ $? -eq 0 ]; then pass "ewt_test (EWT r2.17 test split, fetched at build) matches the lock"
 else fail "ewt_test does not match the lock"; fi
+
+# WSJ section 01 (wsj_01), the other exploratory set: NLTK's treebank sample,
+# read through NLTK rather than from data/, so its files are looked up where
+# NLTK finds them. The image downloads it at build time and checks it there
+# too (Dockerfile); NLTK's index pins no ref, so these 100 digests are what
+# would show that it changed. The offline switch makes a missing sample a
+# failure here rather than a download.
+SYNTACTIC_ANALYSIS_OFFLINE=1 python /usr/local/bin/check_lock_data.py wsj_01
+if [ $? -eq 0 ]; then pass "wsj_01 (NLTK treebank sample, WSJ section 01, fetched at build) matches the lock"
+else fail "wsj_01 does not match the lock"; fi
 echo
 
 # -----------------------------------------------------------------------------
@@ -144,10 +154,6 @@ skip "lock key 'commit' - mt_public is a squashed publication of the project"
 echo "        The lock names the commit it was computed from, in the original"
 echo "        repository. mt_public has a history of its own, so that hash is"
 echo "        not reachable here and recomputing the key would always differ."
-skip "lock key 'data', entry 'wsj_01' - the NLTK treebank sample is not in the image"
-echo "        It is NLTK's Penn Treebank sample (corpora/treebank, WSJ section 01),"
-echo "        which nltk.download serves from the nltk_data index rather than from"
-echo "        a pinned ref. setup.sh downloads it (step 3); this image does not."
 echo
 
 echo "============================================================"

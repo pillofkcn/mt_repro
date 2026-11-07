@@ -1,9 +1,12 @@
 """Compare the files of exploratory datasets with the digests plan/LOCK.json records.
 
     python check_lock_data.py ewt_test [KEY ...]
+    SYNTACTIC_ANALYSIS_OFFLINE=1 python check_lock_data.py wsj_01
 
 Exit 0 if every file of every named dataset matches the lock, 1 otherwise. Run
-from prog/.
+from prog/. A dataset read through NLTK (wsj_01) is looked up where NLTK finds
+it; with the project's offline switch on, a missing package is a failure and
+never a download.
 
 scripts/fetch_data.py covers only the datasets the plan gives a `source` (the
 two confirmatory sets), so the lock's `data` key also holds datasets it never
@@ -52,8 +55,6 @@ def main(keys: list[str]) -> int:
             continue
         recorded = data.get(key)
         problems = problems_of(key, dataset, recorded, root)
-        # Digests are shown for a dataset with a local copy only: the files of one
-        # read through NLTK are named relative to nltk_data, not to prog/.
         if isinstance(recorded, dict) and getattr(dataset, "nltk_sections", None) is None:
             for name, digest in sorted(recorded.items()):
                 path = root / name
@@ -61,10 +62,42 @@ def main(keys: list[str]) -> int:
                 print(f"        {key}  {name}")
                 print(f"          recorded  {digest}")
                 print(f"          computed  {computed}")
+        elif isinstance(recorded, dict):
+            show_through_nltk(seal, key, dataset, recorded, root)
         for problem in problems:
             print(f"        PROBLEM  {problem}")
         failed += bool(problems)
     return 1 if failed else 0
+
+
+def show_through_nltk(seal, key: str, dataset, recorded: dict, root: Path) -> None:
+    """A dataset read through NLTK: where NLTK finds it, and how many of its files match.
+
+    Its files are named relative to the entry of nltk.data.path that holds them,
+    not to prog/, and there are a hundred of them, so they are summed up rather
+    than listed. seal.dataset_files finds them the way the verdict above does;
+    the verdict itself is still seal's.
+    """
+    try:
+        files = seal.dataset_files(dataset, root)
+    except LookupError:
+        print(f"        {key}  NLTK does not find it")
+        return
+    names = sorted(recorded)
+    entries = sorted({
+        str(path)[: -len(name)].rstrip("/")
+        for name, path in files.items()
+        if str(path).endswith(name)
+    })
+    matching = sum(
+        1
+        for name, path in files.items()
+        if name in recorded and path.is_file() and seal.sha256_of(path) == recorded[name]
+    )
+    print(f"        {key}  nltk_data/{names[0]} ... {Path(names[-1]).name}")
+    print(f"          found in  {', '.join(entries) or '(nowhere)'}")
+    print(f"          recorded  {len(recorded)} files")
+    print(f"          matching  {matching}")
 
 
 if __name__ == "__main__":

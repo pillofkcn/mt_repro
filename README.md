@@ -75,7 +75,8 @@ instead of "the data moved".
 | 3 | The pinned refs still serve the recorded bytes | `verify` |
 | 4 | The local copy of the data matches its digests, with no network | `verify` |
 | 5 | The EWT test split, fetched from release r2.17 at build time, matches the lock | `verify` |
-| 6 | Every reachable configuration builds, loads and scores against gold | `smoke` |
+| 6 | WSJ section 01 of NLTK's treebank sample, fetched at build time, matches the lock's 100 digests | `verify` |
+| 7 | Every reachable configuration builds, loads and scores against gold | `smoke` |
 
 Check 2 goes through the project's own `Plan.sha256` rather than `sha256sum`, because the
 digest is taken with CRLF read as LF. A checkout on a machine that normalises line endings
@@ -89,11 +90,6 @@ training them from zero takes about 3 h 15 min on a CPU. A CI job that did it on
 push would take three hours and nobody would read it. `scripts/verify.sh` reports this as
 `SKIP` with the reason, rather than printing green over a run that covered less than the
 lock does.
-
-**WSJ section 01, the `wsj_01` entry of the lock's `data` key.** It is NLTK's Penn
-Treebank sample, which `nltk.download` serves from the nltk_data index rather than from a
-pinned ref, and the `verify` image does not download NLTK data. `verify.sh` reports it as
-`SKIP` with that reason.
 
 **Seven of the sixteen configurations.** The five `stanza_*` rows, `benepar` and
 `supar_con` pull in torch, and the `electra-large` rows additionally load a 1.3 GB
@@ -138,6 +134,16 @@ adds the torch-free analyzers, at the versions the lock records; `full` installs
 pydantic v1. A floating base would eventually move there and fail on a commit that changed
 nothing. The tag is in turn pinned to its digest: a tag is rebuilt for security patches,
 so it was the last thing in the chain that could still move between runs.
+
+**The smoke run downloads nothing.** Everything a smoke row loads is in the image or in
+`model_cache/`: the EWT split and NLTK's treebank sample are fetched at build time and
+checked against the lock, NLTK's tagger is fetched with them, and spaCy's pipeline is an
+installed wheel. The image sets `SYNTACTIC_ANALYSIS_OFFLINE=1`, the project's own switch
+for a run, so a missing package fails its row instead of being fetched from whatever the
+server holds that day. NLTK's index is not pinned to a ref the way EWT's release tag is,
+so for the treebank sample it is the lock's digests that make a change loud, at build
+time. The NLTK data sits in `/usr/local/share/nltk_data`, not in `model_cache/`: the
+smoke job bind-mounts `model_cache/`, and a mount hides whatever the image holds there.
 
 **`MT_COMMIT` is a file, not a workflow variable,** so bumping the commit under test is a
 one-line diff with a reason in the message, and the `Makefile` and the workflow cannot
