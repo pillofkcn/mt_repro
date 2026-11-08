@@ -42,7 +42,7 @@ jobs:
     outputs:
       mt_ref: ${{ steps.pick.outputs.mt_ref }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - id: pick
         run: |
           REF="${{ inputs.mt_ref }}"
@@ -69,7 +69,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Build verify image
         run: |
@@ -96,7 +96,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Build smoke image
         run: |
@@ -107,7 +107,7 @@ jobs:
 
       - name: Restore trained models
         id: models
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: model_cache
           # Keyed on the commit: a change to a training script changes the
@@ -156,7 +156,7 @@ jobs:
 
       - name: Upload smoke evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: smoke-${{ needs.resolve.outputs.mt_ref }}
           path: out/
